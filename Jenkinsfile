@@ -264,7 +264,8 @@ pipeline {
             steps {
                 slackSend(color: '#439FE0', channel: SLACK_CHANNEL, message: "🚀 *STAGE 10:* Pushing Docker image to DockerHub...")
                 script {
-                    withDockerRegistry(credentialsId: 'dockerhub-credentials-id', toolName: 'docker-latest') {   
+                     // Jenkins will now use the system's native Docker.
+                    withDockerRegistry(credentialsId: 'dockerhub-credentials-id') {   
                         sh "docker push ${IMAGE_NAME}:${TAG}"
                         sh "docker push ${IMAGE_NAME}:latest"
                     }
