@@ -43,8 +43,7 @@ pipeline {
         stage('3. Install Dependencies') {
             steps {
                 slackSend(color: '#439FE0', channel: SLACK_CHANNEL, message: "🛠️ *STAGE 3:* Downloading dependencies using Yarn...")
-                // Fixed: Changed from 'npm install' to 'yarn install' to match your source code
-                sh "yarn install"
+                 sh "npm install"
             }
         }
                 
