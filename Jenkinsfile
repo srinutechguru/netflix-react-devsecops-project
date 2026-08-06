@@ -136,7 +136,9 @@ pipeline {
                     # 2. Update the Kubernetes manifests
                     kubectl apply -f k8s/namespace.yaml
 
-                    
+                    # 3. Replace the dynamic placeholder with the exact new image tag
+                    sed -i "s|image: .*|image: ${IMAGE_NAME}:${TAG}|g" k8s/deployment.yaml
+                                          
                     # Apply updated manifests to the namespace
                     kubectl apply -f k8s/deployment.yaml
                     kubectl apply -f k8s/service.yaml
