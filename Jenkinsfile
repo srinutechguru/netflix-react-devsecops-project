@@ -10,7 +10,7 @@ pipeline {
         // DockerHub configuration
         DOCKERHUB_CREDS = credentials('dockerhub-credentials-id') 
         TMDB_KEY = credentials('tmdb-api-key') 
-        IMAGE_NAME = "srinutechguru/netflix--react-clone" 
+        IMAGE_NAME = "srinutechguru/netflix-react-clone" 
         TAG = "v${env.BUILD_NUMBER}" 
         
         EKS_CLUSTER_NAME = "eks-cluster" 
@@ -130,6 +130,11 @@ pipeline {
                 slackSend(color: '#439FE0', channel: SLACK_CHANNEL, message: "☸️ *STAGE 12:* Deploying to AWS EKS...")
                 
                 sh """
+                # DEBUG: Print out the contents of the k8s folder to the Jenkins console
+                echo "--- FILES INSIDE k8s FOLDER ---"
+                ls -la k8s/
+                echo "-------------------------------"
+                
                 # 1. Authorize Kubectl to communicate with the existing EKS cluster
                 aws eks update-kubeconfig --region ${AWS_REGION} --name ${EKS_CLUSTER_NAME}
                 
@@ -137,20 +142,22 @@ pipeline {
                 kubectl apply -f k8s/namespace.yaml
                 
                 # 3. Replace the dynamic placeholder with the exact new image tag
-                sed -i "s|image: .*|image: ${IMAGE_NAME}:${TAG}|g" k8s/deployment.yaml
+                sed -i "s|image: .*|image: ${IMAGE_NAME}:${TAG}|g" k8s/deployment.yml
                 
                 # 4. Apply updated manifests to the namespace
-                kubectl apply -f k8s/deployment.yaml
-                kubectl apply -f k8s/service.yaml
+                kubectl apply -f k8s/deployment.yml
+                kubectl apply -f k8s/service.yml
                 """  
             }
         } 
+	} // <-- This closes 'stages'
         
     post {
         always {
             slackSend(color: "${currentBuild.currentResult == 'SUCCESS' ? 'good' : 'danger'}", 
                       message: "DevSecOps Pipeline for '${env.JOB_NAME} [${env.BUILD_NUMBER}]' has completed with result: ${currentBuild.currentResult}.\nBuild URL: ${env.BUILD_URL}")
                }
-           }
-        }    
-    }
+           } // <-- This closes 'post'
+        
+    } // <-- This closes 'pipeline' 
+    
