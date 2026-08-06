@@ -150,6 +150,7 @@ pipeline {
         always {
             slackSend(color: "${currentBuild.currentResult == 'SUCCESS' ? 'good' : 'danger'}", 
                       message: "DevSecOps Pipeline for '${env.JOB_NAME} [${env.BUILD_NUMBER}]' has completed with result: ${currentBuild.currentResult}.\nBuild URL: ${env.BUILD_URL}")
-        }
+               }
+           }
+        }    
     }
-}
