@@ -1,0 +1,20 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: netflix-react-app
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: 'https://github.com/srinutechguru/netflix-react-devsecops-project.git'
+    targetRevision: main
+    path: k8s
+  destination:
+    server: 'https://kubernetes.default.svc'
+    namespace: netflix-app
+  syncPolicy:
+    automated:
+      prune: true # Specifies if resources should be pruned during auto-syncing
+      selfHeal: true # Specifies if partial app sync should be executed when resources are changed only in target Kubernetes cluster
+    syncOptions:
+      - CreateNamespace=true # Ensures the namespace exists in the destination cluster
