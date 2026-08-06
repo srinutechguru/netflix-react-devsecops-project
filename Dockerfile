@@ -1,11 +1,12 @@
 # Stage 1: Build the React Application
-FROM node:16.17.0-alpine as builder
+FROM node:18-alpine AS builder
 WORKDIR /app
 
-# Install dependencies using Yarn
-COPY ./package.json .
-COPY ./yarn.lock .
-RUN yarn install
+# Copy the package files
+COPY package*.json ./
+
+# Use standard npm instead of yarn
+RUN npm install
 
 # Copy application source code
 COPY . .
@@ -16,8 +17,8 @@ ARG TMDB_V3_API_KEY
 ENV VITE_APP_TMDB_V3_API_KEY=${TMDB_V3_API_KEY}
 ENV VITE_APP_API_ENDPOINT_URL="https://api.themoviedb.org/3"
 
-# Build the optimized production static files
-RUN yarn build
+# Build the optimized production static files using npm
+RUN npm run build
 
 # Stage 2: Serve the app using Nginx
 FROM nginx:stable-alpine
