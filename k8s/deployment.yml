@@ -1,0 +1,43 @@
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: tmdb-secret
+  namespace: netflix-app
+type: Opaque
+data:
+  # The Jenkins pipeline will automatically inject the base64 encoded key here
+  tmdb-key: ""
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: netflix-clone-deployment
+  namespace: netflix-app
+  labels:
+    app: netflix-clone
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: netflix-clone
+  template:
+    metadata:
+      labels:
+        app: netflix-clone
+    spec:
+      containers:
+      - name: netflix-clone
+        # The Jenkins pipeline will automatically replace this entire line with the new tag
+        image: srinutechguru/netflix-react-clone:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 80
+        # Injecting the secret as an environment variable into the container
+        env:
+        - name: TMDB_V3_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: tmdb-secret
+              key: tmdb-key
