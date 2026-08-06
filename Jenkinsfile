@@ -124,29 +124,27 @@ pipeline {
                 sh "docker run -d --name netflix-app -p 8081:80 ${IMAGE_NAME}:latest"
             }
         }
-        
+       
         stage('12. Deploy to AWS EKS') {
             steps {
                 slackSend(color: '#439FE0', channel: SLACK_CHANNEL, message: "☸️ *STAGE 12:* Deploying to AWS EKS...")
                 
-                    sh """
-                    # 1. Authorize Kubectl to communicate with the existing EKS cluster
-                    aws eks update-kubeconfig --region ${AWS_REGION} --name ${EKS_CLUSTER_NAME}
-                    
-                    # 2. Update the Kubernetes manifests
-                    kubectl apply -f k8s/namespace.yaml
-
-                    # 3. Replace the dynamic placeholder with the exact new image tag
-                    sed -i "s|image: .*|image: ${IMAGE_NAME}:${TAG}|g" k8s/deployment.yaml
-                                          
-                    # Apply updated manifests to the namespace
-                    kubectl apply -f k8s/deployment.yaml
-                    kubectl apply -f k8s/service.yaml
-                    """  
-                }
+                sh """
+                # 1. Authorize Kubectl to communicate with the existing EKS cluster
+                aws eks update-kubeconfig --region ${AWS_REGION} --name ${EKS_CLUSTER_NAME}
+                
+                # 2. Update the Kubernetes manifests
+                kubectl apply -f k8s/namespace.yaml
+                
+                # 3. Replace the dynamic placeholder with the exact new image tag
+                sed -i "s|image: .*|image: ${IMAGE_NAME}:${TAG}|g" k8s/deployment.yaml
+                
+                # 4. Apply updated manifests to the namespace
+                kubectl apply -f k8s/deployment.yaml
+                kubectl apply -f k8s/service.yaml
+                """  
             }
-        }
-    }
+        } 
         
     post {
         always {
