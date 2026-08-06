@@ -129,7 +129,6 @@ pipeline {
             steps {
                 slackSend(color: '#439FE0', channel: SLACK_CHANNEL, message: "☸️ *STAGE 12:* Deploying to AWS EKS...")
                 
-                withCredentials([string(credentialsId: 'tmdb-api-key', variable: 'SECURE_TMDB_KEY')]) {
                     sh """
                     # 1. Authorize Kubectl to communicate with the existing EKS cluster
                     aws eks update-kubeconfig --region ${AWS_REGION} --name ${EKS_CLUSTER_NAME}
@@ -137,12 +136,6 @@ pipeline {
                     # 2. Update the Kubernetes manifests
                     kubectl apply -f k8s/namespace.yaml
 
-                    # Securely update the K8s Secret with the actual TMDB key
-                    ENCODED_KEY=\$(echo -n "\$SECURE_TMDB_KEY" | base64)
-                    sed -i "s|tmdb-key: \\"\\"|tmdb-key: \\"\$ENCODED_KEY\\"|g" k8s/deployment.yaml
-                    
-                    # Replace the dynamic placeholder with the exact new image tag
-                    sed -i "s|image: .*|image: ${IMAGE_NAME}:${TAG}|g" k8s/deployment.yaml
                     
                     # Apply updated manifests to the namespace
                     kubectl apply -f k8s/deployment.yaml
