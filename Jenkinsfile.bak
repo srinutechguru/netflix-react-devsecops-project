@@ -2,7 +2,7 @@ pipeline {
     agent any
     
     tools {
-        jdk 'jdk17'
+        jdk 'jdk21'
         nodejs 'node18'
     }
     
@@ -10,16 +10,15 @@ pipeline {
         // DockerHub configuration
         DOCKERHUB_CREDS = credentials('dockerhub-credentials-id') 
         TMDB_KEY = credentials('tmdb-api-key') 
-        
-        // Docker registry targeting
         IMAGE_NAME = "srinutechguru/netflix-react-clone" 
-
-        // Dynamically tags the image with the Jenkins Build Number
         TAG = "v${env.BUILD_NUMBER}" 
         
+        EKS_CLUSTER_NAME = "eks-cluster" 
+        AWS_REGION = "us-east-1" 
         
         // GitHub GitOps Repository configuration
-        GITOPS_REPO = "https://github.com/srinutechguru/netflix-react-gitops-deployment.git"
+        GITHUB_CREDS = credentials('github-token-id')
+        GITOPS_REPO = "https://github.com/srinutechguru/netflix-react-devsecops-project.git"
         
         // Slack Configuration
         SLACK_CHANNEL = "dev"
@@ -126,33 +125,31 @@ pipeline {
             }
         }
        
-        stage('12.Update Manifests in GitOps Repo') {
+        stage('12. Deploy to AWS EKS') {
             steps {
-                slackSend(color: '#439FE0', channel: SLACK_CHANNEL, message: "☸️ *STAGE 12:* Updating Manifests in Gitops Repo...")
+                slackSend(color: '#439FE0', channel: SLACK_CHANNEL, message: "☸️ *STAGE 12:* Deploying to AWS EKS...")
                 
-                // Uses a GitHub Personal Access Token to commit back to the K8s repository
-                // FIXED: Use 'string' binding because 'github-token-id' is a Secret text credential
-                withCredentials([string(credentialsId: 'github-token-id', variable: 'GITHUB_TOKEN')]) {
-                    sh """
-                        # Configure Git identity for the automated commit
-                        git config --global user.name "Jenkins Automation"
-                        git config --global user.email "srinutechguru@gmail.com"
-                        
-                        # Clone the infrastructure repository securely by injecting the token into the URL
-                        git clone https://x-access-token:${GITHUB_TOKEN}@github.com/srinutechguru/netflix-react-gitops-deployment.git
-                        
-                        cd netflix-react-gitops-deployment.git/k8s
-                        
-                        # Use sed to dynamically update the deployment.yaml with the new image tag
-                        sed -i "s|image: ${IMAGE_NAME}:.*|image: ${IMAGE_NAME}:${IMAGE_TAG}|g" deployment.yaml
-                        
-                        # Commit and push the changes to trigger ArgoCD
-                        git add deployment.yaml
-                        git commit -m "chore: update zomato image tag to ${IMAGE_TAG} [skip ci]"
-                        git push origin main
-                    """   
-          }
-         } 
+                sh """
+                # DEBUG: Print out the contents of the k8s folder to the Jenkins console
+                echo "--- FILES INSIDE k8s FOLDER ---"
+                ls -la k8s/
+                echo "-------------------------------"
+                
+                # 1. Authorize Kubectl to communicate with the existing EKS cluster
+                aws eks update-kubeconfig --region ${AWS_REGION} --name ${EKS_CLUSTER_NAME}
+                
+                # 2. Update the Kubernetes manifests
+                kubectl apply -f k8s/namespace.yaml
+                
+                # 3. Replace the dynamic placeholder with the exact new image tag
+                sed -i "s|image: .*|image: ${IMAGE_NAME}:${TAG}|g" k8s/deployment.yml
+                
+                # 4. Apply updated manifests to the namespace
+                kubectl apply -f k8s/deployment.yml
+                kubectl apply -f k8s/service.yml
+                """  
+            }
+        } 
 	} // <-- This closes 'stages'
         
     post {
