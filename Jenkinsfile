@@ -1,30 +1,30 @@
 pipeline {
     agent any
-    
+
     tools {
         jdk 'jdk17'
         nodejs 'node18'
     }
-    
+
     environment {
         // DockerHub configuration
-        DOCKERHUB_CREDS = credentials('dockerhub-credentials-id') 
-        TMDB_KEY = credentials('tmdb-api-key') 
-        
+        DOCKERHUB_CREDS = credentials('dockerhub-credentials-id')
+        TMDB_KEY = credentials('tmdb-api-key')
+
         // Docker registry targeting
-        IMAGE_NAME = "srinutechguru/netflix-react-clone" 
+        IMAGE_NAME = "srinutechguru/netflix-react-clone"
 
         // Dynamically tags the image with the Jenkins Build Number
-        TAG = "v${env.BUILD_NUMBER}" 
-        
-        
+        TAG = "v${env.BUILD_NUMBER}"
+
+
         // GitHub GitOps Repository configuration
         GITOPS_REPO = "https://github.com/srinutechguru/netflix-react-gitops-deployment.git"
-        
+
         // Slack Configuration
         SLACK_CHANNEL = "dev"
     }
-    
+
     stages {
         stage('1. Clean Workspace') {
             steps {
@@ -32,14 +32,14 @@ pipeline {
                 cleanWs()
             }
         }
-        
+
         stage('2. Checkout Code') {
             steps {
                 slackSend(color: '#439FE0', channel: SLACK_CHANNEL, message: "📥 *STAGE 2:* Pulling source code from GitHub...")
                 git branch: 'main', url: 'https://github.com/srinutechguru/netflix-react-devsecops-project.git'
             }
         }
-        
+
         stage('3. Install Dependencies') {
             steps {
                 slackSend(color: '#439FE0', channel: SLACK_CHANNEL, message: "🛠️ *STAGE 3:* Downloading dependencies using NPM...")
@@ -47,7 +47,7 @@ pipeline {
                 sh "npm install"
             }
         }
-                
+
         stage('4. SonarQube Code Analysis') {
             steps {
                 slackSend(color: '#439FE0', channel: SLACK_CHANNEL, message: "🔍 *STAGE 4:* Running SonarQube Static Application Security Testing (SAST)...")
@@ -61,7 +61,7 @@ pipeline {
                 }
             }
         }
-        
+
         stage('5. Quality Gate') {
             steps {
                 slackSend(color: '#439FE0', channel: SLACK_CHANNEL, message: "🚦 *STAGE 5:* Sonarqube Quality Gate stage started...")
@@ -70,7 +70,7 @@ pipeline {
                 }
             }
         }
-        
+
         stage('6. OWASP Dependency-Check') {
             steps {
                 slackSend(color: '#439FE0', channel: SLACK_CHANNEL, message: "🛡️ *STAGE 6:* OWASP Dependency-Check stage started...")
@@ -78,14 +78,14 @@ pipeline {
                 dependencyCheckPublisher pattern: '**/dependency-check-report.xml'
             }
         }
-        
+
         stage('7. Trivy FS Scan') {
             steps {
                 slackSend(color: '#439FE0', channel: SLACK_CHANNEL, message: "🔎 *STAGE 7:* Trivy FS Scan stage started...")
                 sh "trivy fs . > trivyfs.txt"
             }
         }
-              
+
         stage('8. Docker Build & Tag') {
             steps {
                 slackSend(color: '#439FE0', channel: SLACK_CHANNEL, message: "🐳 *STAGE 8:* Building Docker Image: ${IMAGE_NAME}:${TAG}...")
@@ -94,19 +94,19 @@ pipeline {
                 sh "docker tag ${IMAGE_NAME}:${TAG} ${IMAGE_NAME}:latest"
             }
         }
-        
+
         stage('9. Trivy Image Scan') {
             steps {
                 slackSend(color: '#439FE0', channel: SLACK_CHANNEL, message: "🐋 *STAGE 9:* Trivy Image Scan stage started...")
-                sh "trivy image ${IMAGE_NAME}:${TAG} > trivyimage.txt" 
+                sh "trivy image ${IMAGE_NAME}:${TAG} > trivyimage.txt"
             }
         }
-        
+
         stage('10. Docker Push') {
             steps {
                 slackSend(color: '#439FE0', channel: SLACK_CHANNEL, message: "🚀 *STAGE 10:* Pushing Docker image to DockerHub...")
                 script {
-                    withDockerRegistry(credentialsId: 'dockerhub-credentials-id') {   
+                    withDockerRegistry(credentialsId: 'dockerhub-credentials-id') {
                         sh "docker push ${IMAGE_NAME}:${TAG}"
                         sh "docker push ${IMAGE_NAME}:latest"
                     }
@@ -117,50 +117,52 @@ pipeline {
         stage('11. Deploy to container') {
             steps {
                 slackSend(color: '#439FE0', channel: SLACK_CHANNEL, message: "📦 *STAGE 11:* Deploying to local Docker container...")
-                
+
                 // Stops and removes the old container if it exists, so the port doesn't conflict on rebuilds
                 sh 'docker rm -f netflix-app || true'
-                
+
                  // Deployment command using the dynamic variable
                 sh "docker run -d --name netflix-app -p 8081:80 ${IMAGE_NAME}:latest"
             }
         }
-       
+
         stage('12.Update Manifests in GitOps Repo') {
             steps {
                 slackSend(color: '#439FE0', channel: SLACK_CHANNEL, message: "☸️ *STAGE 12:* Updating Manifests in Gitops Repo...")
-                
+
                 // Uses a GitHub Personal Access Token to commit back to the K8s repository
-                // FIXED: Use 'string' binding because 'github-token-id' is a Secret text credential
-                withCredentials([string(credentialsId: 'github-token-id', variable: 'GITHUB_TOKEN')]) {
+                // FIXED: Use 'string' binding because 'netflix-react-gitops-token' is a Secret text credential,
+	        // netflix-react-gitops-token with content read and write permission
+                withCredentials([string(credentialsId: 'netflix-react-gitops-token', variable: 'GITHUB_TOKEN')]) {
                     sh """
                         # Configure Git identity for the automated commit
                         git config --global user.name "Jenkins Automation"
                         git config --global user.email "srinutechguru@gmail.com"
-                        
+
                         # Clone the infrastructure repository securely by injecting the token into the URL
                         git clone https://x-access-token:${GITHUB_TOKEN}@github.com/srinutechguru/netflix-react-gitops-deployment.git
-                        
-                        cd netflix-react-gitops-deployment.git/k8s
-                        
+
+                        cd netflix-react-gitops-deployment/k8s
+
                         # Use sed to dynamically update the deployment.yaml with the new image tag
-                        sed -i "s|image: ${IMAGE_NAME}:.*|image: ${IMAGE_NAME}:${IMAGE_TAG}|g" deployment.yaml
-                        
+                        sed -i "s|image: ${IMAGE_NAME}:.*|image: ${IMAGE_NAME}:${TAG}|g" deployment.yaml
+
                         # Commit and push the changes to trigger ArgoCD
                         git add deployment.yaml
-                        git commit -m "chore: update zomato image tag to ${IMAGE_TAG} [skip ci]"
+                        git commit -m "chore: update netflix image tag to ${TAG} [skip ci]"
                         git push origin main
-                    """   
-          }
-         } 
-	} // <-- This closes 'stages'
-        
+                    """
+               }
+            }
+        } 
+		
+	} // <-- This closes 'stages''
+
     post {
         always {
-            slackSend(color: "${currentBuild.currentResult == 'SUCCESS' ? 'good' : 'danger'}", 
+            slackSend(color: "${currentBuild.currentResult == 'SUCCESS' ? 'good' : 'danger'}",
                       message: "DevSecOps Pipeline for '${env.JOB_NAME} [${env.BUILD_NUMBER}]' has completed with result: ${currentBuild.currentResult}.\nBuild URL: ${env.BUILD_URL}")
                }
            } // <-- This closes 'post'
-        
-    } // <-- This closes 'pipeline' 
-    
+
+    } // <-- This closes 'pipeline'
