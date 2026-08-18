@@ -14,9 +14,6 @@ pipeline {
         // Docker registry targeting
         IMAGE_NAME = "srinutechguru/netflix-react-clone"
 
-        // Dynamically tags the image with the Jenkins Build Number
-        TAG = "v${env.BUILD_NUMBER}"
-
 
         // GitHub GitOps Repository configuration
         GITOPS_REPO = "https://github.com/srinutechguru/netflix-react-gitops-deployment.git"
@@ -40,17 +37,35 @@ pipeline {
             }
         }
 
-        stage('3. Install Dependencies') {
+        // --- Image Tag CONFIGURATION STAGE ---
+        stage('3. Generate Dynamic Version Tag') {
             steps {
-                slackSend(color: '#439FE0', channel: SLACK_CHANNEL, message: "🛠️ *STAGE 3:* Downloading dependencies using NPM...")
+			 slackSend(color: '#439FE0', channel: SLACK_CHANNEL, message: "🛠️ *STAGE 3:* Generating Dynamic Version Tag...")
+                script {
+                    // Extracts the first 7 characters of the latest Git commit hash
+                    env.GIT_HASH = sh(script: "git rev-parse --short HEAD", returnStdout: true).trim()
+                    
+                    // Combines the Jenkins Build Number with the Git Hash
+                    env.TAG = "v${env.BUILD_NUMBER}-${env.GIT_HASH}"
+                    
+                    echo "========================================"
+                    echo "Generated Production Tag: ${env.TAG}"
+                    echo "========================================"
+                }
+            }
+        }
+
+        stage('4. Install Dependencies') {
+            steps {
+                slackSend(color: '#439FE0', channel: SLACK_CHANNEL, message: "🛠️ *STAGE 4:* Downloading dependencies using NPM...")
                 // Standardized on NPM
                 sh "npm install"
             }
         }
 
-        stage('4. SonarQube Code Analysis') {
+        stage('5. SonarQube Code Analysis') {
             steps {
-                slackSend(color: '#439FE0', channel: SLACK_CHANNEL, message: "🔍 *STAGE 4:* Running SonarQube Static Application Security Testing (SAST)...")
+                slackSend(color: '#439FE0', channel: SLACK_CHANNEL, message: "🔍 *STAGE 5:* Running SonarQube Static Application Security Testing (SAST)...")
                 script {
                     def scannerHome = tool 'Sonar-Scanner'
                     withSonarQubeEnv('sonarqube-server') {
@@ -62,61 +77,61 @@ pipeline {
             }
         }
 
-        stage('5. Quality Gate') {
+        stage('6. Quality Gate') {
             steps {
-                slackSend(color: '#439FE0', channel: SLACK_CHANNEL, message: "🚦 *STAGE 5:* Sonarqube Quality Gate stage started...")
+                slackSend(color: '#439FE0', channel: SLACK_CHANNEL, message: "🚦 *STAGE 6:* Sonarqube Quality Gate stage started...")
                 script {
                     waitForQualityGate abortPipeline: true, credentialsId: 'sonarqube-token-id'
                 }
             }
         }
 
-        stage('6. OWASP Dependency-Check') {
+        stage('7. OWASP Dependency-Check') {
             steps {
-                slackSend(color: '#439FE0', channel: SLACK_CHANNEL, message: "🛡️ *STAGE 6:* OWASP Dependency-Check stage started...")
+                slackSend(color: '#439FE0', channel: SLACK_CHANNEL, message: "🛡️ *STAGE 7:* OWASP Dependency-Check stage started...")
                 dependencyCheck additionalArguments: '--scan ./ --disableYarnAudit --disableNodeAudit', odcInstallation: 'owasp-dependency-check'
                 dependencyCheckPublisher pattern: '**/dependency-check-report.xml'
             }
         }
 
-        stage('7. Trivy FS Scan') {
+        stage('8. Trivy FS Scan') {
             steps {
-                slackSend(color: '#439FE0', channel: SLACK_CHANNEL, message: "🔎 *STAGE 7:* Trivy FS Scan stage started...")
+                slackSend(color: '#439FE0', channel: SLACK_CHANNEL, message: "🔎 *STAGE 8:* Trivy FS Scan stage started...")
                 sh "trivy fs . > trivyfs.txt"
             }
         }
 
-        stage('8. Docker Build & Tag') {
+        stage('9. Docker Build & Tag') {
             steps {
-                slackSend(color: '#439FE0', channel: SLACK_CHANNEL, message: "🐳 *STAGE 8:* Building Docker Image: ${IMAGE_NAME}:${TAG}...")
+                slackSend(color: '#439FE0', channel: SLACK_CHANNEL, message: "🐳 *STAGE 9:* Building Docker Image: ${IMAGE_NAME}:${env.TAG}...")
                 // Securely pass the TMDB API key during the build
-                sh "docker build --build-arg TMDB_V3_API_KEY=${TMDB_KEY} -t ${IMAGE_NAME}:${TAG} ."
-                sh "docker tag ${IMAGE_NAME}:${TAG} ${IMAGE_NAME}:latest"
+                sh "docker build --build-arg TMDB_V3_API_KEY=${TMDB_KEY} -t ${IMAGE_NAME}:${env.TAG} ."
+                sh "docker tag ${IMAGE_NAME}:${env.TAG} ${IMAGE_NAME}:latest"
             }
         }
 
-        stage('9. Trivy Image Scan') {
+        stage('10. Trivy Image Scan') {
             steps {
-                slackSend(color: '#439FE0', channel: SLACK_CHANNEL, message: "🐋 *STAGE 9:* Trivy Image Scan stage started...")
+                slackSend(color: '#439FE0', channel: SLACK_CHANNEL, message: "🐋 *STAGE 10:* Trivy Image Scan stage started...")
                 sh "trivy image ${IMAGE_NAME}:${TAG} > trivyimage.txt"
             }
         }
 
-        stage('10. Docker Push') {
+        stage('11. Docker Push') {
             steps {
-                slackSend(color: '#439FE0', channel: SLACK_CHANNEL, message: "🚀 *STAGE 10:* Pushing Docker image to DockerHub...")
+                slackSend(color: '#439FE0', channel: SLACK_CHANNEL, message: "🚀 *STAGE 11:* Pushing Docker image to DockerHub...")
                 script {
                     withDockerRegistry(credentialsId: 'dockerhub-credentials-id') {
-                        sh "docker push ${IMAGE_NAME}:${TAG}"
+                        sh "docker push ${IMAGE_NAME}:${env.TAG}"
                         sh "docker push ${IMAGE_NAME}:latest"
                     }
                 }
             }
         }
 
-        stage('11. Deploy to container') {
+        stage('12. Deploy to Local Container (Testing)') {
             steps {
-                slackSend(color: '#439FE0', channel: SLACK_CHANNEL, message: "📦 *STAGE 11:* Deploying to local Docker container...")
+                slackSend(color: '#439FE0', channel: SLACK_CHANNEL, message: "📦 *STAGE 12:* Deploying to local Docker container...")
 
                 // Stops and removes the old container if it exists, so the port doesn't conflict on rebuilds
                 sh 'docker rm -f netflix-app || true'
@@ -126,13 +141,13 @@ pipeline {
             }
         }
 
-        stage('12.Update Manifests in GitOps Repo') {
+        stage('13.Update Manifests in GitOps Repo') {
             steps {
-                slackSend(color: '#439FE0', channel: SLACK_CHANNEL, message: "☸️ *STAGE 12:* Updating Manifests in Gitops Repo...")
+                slackSend(color: '#439FE0', channel: SLACK_CHANNEL, message: "☸️ *STAGE 13:* Updating Manifests in Gitops Repo with tag ${env.TAG}...")
 
                 // Uses a GitHub Personal Access Token to commit back to the K8s repository
                 // FIXED: Use 'string' binding because 'netflix-react-gitops-token' is a Secret text credential,
-	        // netflix-react-gitops-token with content read and write permission
+		// netflix-react-gitops-token with content read and write permission
                 withCredentials([string(credentialsId: 'netflix-react-gitops-token', variable: 'GITHUB_TOKEN')]) {
                     sh """
                         # Configure Git identity for the automated commit
@@ -145,11 +160,11 @@ pipeline {
                         cd netflix-react-gitops-deployment/k8s
 
                         # Use sed to dynamically update the deployment.yaml with the new image tag
-                        sed -i "s|image: ${IMAGE_NAME}:.*|image: ${IMAGE_NAME}:${TAG}|g" deployment.yaml
+                        sed -i "s|image: ${IMAGE_NAME}:.*|image: ${IMAGE_NAME}:${env.TAG}|g" deployment.yaml
 
                         # Commit and push the changes to trigger ArgoCD
                         git add deployment.yaml
-                        git commit -m "chore: update netflix image tag to ${TAG} [skip ci]"
+                        git commit -m "chore: update netflix image tag to ${env.TAG} [skip ci]"
                         git push origin main
                     """
                }
